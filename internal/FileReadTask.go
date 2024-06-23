@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"sync"
@@ -11,13 +12,15 @@ type FileReadTask struct {
 	filename     string
 	num_routines int
 	pattern      string
+	ctx          *context.Context
 }
 
-func NewFileReadTask(filename string, pattern string, num_routines int) *FileReadTask {
+func NewFileReadTask(filename string, pattern string, num_routines int, ctx *context.Context) *FileReadTask {
 	return &FileReadTask{
 		filename:     filename,
 		num_routines: num_routines,
 		pattern:      pattern,
+		ctx:          ctx,
 	}
 }
 
@@ -29,8 +32,10 @@ func (ft *FileReadTask) Start() error {
 	results := make([]string, 0, 500)
 	wg := new(sync.WaitGroup)
 	wg.Add(ft.num_routines)
+
 	channels := make([]chan []Line, ft.num_routines)
 	routines := make([]GrepRoutine, ft.num_routines)
+
 	file, err := os.Open(ft.filename)
 	if err != nil {
 		return fmt.Errorf("", err)
@@ -43,7 +48,7 @@ func (ft *FileReadTask) Start() error {
 	for i := 0; i < ft.num_routines; i++ {
 		var iteration int = i
 		channels[iteration] = make(chan []Line)
-		routines[iteration] = *NewGrepRoutine(iteration, scanner, wg, channels[iteration])
+		routines[iteration] = *NewGrepRoutine(iteration, scanner, wg, channels[iteration], ft.ctx)
 		go routines[iteration].Start(&ft.pattern)
 	}
 

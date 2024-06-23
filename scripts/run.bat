@@ -1,1 +1,1 @@
-go run cmd/pgrep.go -p 2 -target "./test/data/small.txt" -pattern "Bubsy"
+go run cmd/pgrep.go -file="../test/loremIpsum.txt" -pattern="Lorem" -r=2
