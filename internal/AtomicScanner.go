@@ -19,13 +19,16 @@ func NewAtomicScanner(scanner *bufio.Scanner) *AtomicScanner {
 	}
 }
 
-func (s *AtomicScanner) Scan() bool {
-	return s.scanner.Scan()
-}
+func (s *AtomicScanner) Text() (*Line, bool) {
 
-func (s *AtomicScanner) Text() *Line {
+	var line Line
 	s.lock.Lock()
-	defer s.lock.Unlock()
-	s.counter += 1
-	return NewLine(s.counter, s.scanner.Text())
+	canRead := s.scanner.Scan()
+	if canRead {
+		s.counter += 1
+		line = *NewLine(s.counter, s.scanner.Text())
+	}
+	s.lock.Unlock()
+
+	return &line, canRead
 }
