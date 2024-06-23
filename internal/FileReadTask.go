@@ -2,68 +2,73 @@ package internal
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"fmt"
+	"log"
 	"os"
+	"slices"
 	"sync"
 )
 
-type FileReadTask struct {
-	filename     string
-	num_routines int
-	pattern      string
-	ctx          *context.Context
-}
+func GrepFileForPattern(
+	filename *string,
+	pattern *string,
+	matchCase *bool,
+	numRoutines *int,
+	ctx *context.Context,
+) error {
 
-func NewFileReadTask(filename string, pattern string, num_routines int, ctx *context.Context) *FileReadTask {
-	return &FileReadTask{
-		filename:     filename,
-		num_routines: num_routines,
-		pattern:      pattern,
-		ctx:          ctx,
-	}
-}
-
-func (ft *FileReadTask) Start() error {
-
-	fmt.Printf("Initializing task for file %s with %d routines seeking pattern %s\n",
-		ft.filename, ft.num_routines, ft.pattern)
-
-	results := make([]string, 0, 500)
-	wg := new(sync.WaitGroup)
-	wg.Add(ft.num_routines)
-
-	channels := make([]chan []Line, ft.num_routines)
-	routines := make([]GrepRoutine, ft.num_routines)
-
-	file, err := os.Open(ft.filename)
+	file, err := os.Open(*filename)
 	if err != nil {
-		return fmt.Errorf("", err)
+		return fmt.Errorf("Task Creation for file %t seeking pattern %t (case sensitive: %t ) using %t routines failed.\nReason:%t",
+			*filename, *pattern, *matchCase, *numRoutines, err)
 	}
 	defer file.Close()
-	bufsc := bufio.NewScanner(file)
-	bufsc.Split(bufio.ScanLines)
-	scanner := NewAtomicScanner(bufsc)
 
-	for i := 0; i < ft.num_routines; i++ {
+	rout_ctx, err := NewRoutineContext(
+		ctx,
+		NewAtomicScanner(bufio.NewScanner(file)),
+		pattern,
+		matchCase,
+	)
+	if err != nil {
+		return fmt.Errorf("Unexpected error related to pattern: %s", err.Error())
+	}
+
+	log.Printf("Created Task for file %t seeking pattern %t (case sensitive: %t ) using %t routines.",
+		*filename, *pattern, *matchCase, *numRoutines)
+
+	results := make([]Line, 0, 500)
+	wg := new(sync.WaitGroup)
+	wg.Add(*numRoutines)
+
+	channels := make([]chan []Line, *numRoutines)
+	routines := make([]GrepRoutine, *numRoutines)
+
+	for i := 0; i < *numRoutines; i++ {
 		var iteration int = i
 		channels[iteration] = make(chan []Line)
-		routines[iteration] = *NewGrepRoutine(iteration, scanner, wg, channels[iteration], ft.ctx)
-		go routines[iteration].Start(&ft.pattern)
+		routines[iteration] = *NewGrepRoutine(iteration, rout_ctx, wg, channels[iteration])
+		go routines[iteration].Start()
 	}
 
 	for _, element := range channels {
 		lines := <-element
 		for _, line := range lines {
-			results = append(results, line.toString())
+			results = append(results, line)
 		}
 	}
 
 	wg.Wait()
 
-	fmt.Printf("\nFound the pattern %s %d times.\nPattern is contained in the following lines %s.\n", ft.pattern, len(results), ft.pattern)
+	slices.SortFunc(results, func(a, b Line) int {
+		return cmp.Compare(a.Number, b.Number)
+	})
+
+	fmt.Printf("\nFound the pattern %s in %d lines.\nListing the matches:\n", *pattern, len(results))
 	for _, line := range results {
-		fmt.Printf("\n%s\n", line)
+		fmt.Printf("\n%d:%s\n", line.Number, line.Content)
 	}
 
 	return nil

@@ -1,53 +1,58 @@
 package internal
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"sync"
 )
 
 type GrepRoutine struct {
-	id      int
-	scanner *AtomicScanner
-	wg      *sync.WaitGroup
-	chn     chan []Line
-	ctx     *context.Context
+	id  int
+	ctx *RoutineContext
+	wg  *sync.WaitGroup
+	chn chan []Line
 }
 
-func NewGrepRoutine(id int, scanner *AtomicScanner, wg *sync.WaitGroup, chn chan []Line, ctx *context.Context) *GrepRoutine {
+func NewGrepRoutine(id int, context *RoutineContext, workgroup *sync.WaitGroup, channel chan []Line) *GrepRoutine {
 	g := &GrepRoutine{
-		id:      id,
-		scanner: scanner,
-		wg:      wg,
-		chn:     chn,
-		ctx:     ctx,
+		id:  id,
+		ctx: context,
+		wg:  workgroup,
+		chn: channel,
 	}
 	return g
 }
 
-func (g *GrepRoutine) Start(pattern *string) {
-	fmt.Printf("Hello, I am thread")
+func (g *GrepRoutine) Start() {
+
+	var (
+		last_val = true
+		contents string
+	)
+
 	defer g.wg.Done()
 	lines := make([]Line, 0, 300)
-	var last_val = true
-	select {
-	case stop := <-(*g.ctx).Done():
-		fmt.Printf("Routine %d ceasing execution. Reason:", g.id)
-		fmt.Print(stop)
-		fmt.Printf("\n")
-	default:
-		for last_val {
-			line, canRead := g.scanner.Text()
+	for last_val {
+		select {
+		case stop := <-(*g.ctx.AppContext).Done():
+			fmt.Printf("Routine %d ceasing execution. Reason:", g.id)
+			fmt.Print(stop)
+			fmt.Printf("\n")
+			last_val = false
+		default:
+			line, canRead := g.ctx.FileScanner.Text()
 			last_val = canRead
 			if last_val {
-				fmt.Printf("\nRead line #%d: %s \n", line.Number, line.Content)
-				if strings.Contains(line.Content, *pattern) {
-					fmt.Printf("Line contains %s \n", *pattern)
+				if !*g.ctx.ShouldMatchCase {
+					contents = strings.ToLower(line.Content)
+				} else {
+					contents = line.Content
+				}
+				if g.ctx.Pattern.Find([]byte(contents)) != nil {
 					lines = append(lines, *line)
 				}
 			}
 		}
-		g.chn <- lines
 	}
+	g.chn <- lines
 }
