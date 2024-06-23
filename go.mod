@@ -1,3 +1,3 @@
-module github.com/sprugit/concurrent-bookworms
+module bookworm
 
 go 1.22.3
