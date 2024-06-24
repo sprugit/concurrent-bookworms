@@ -1,2 +1,3 @@
 # concurrent-bookworms
-Simple concurrent Golang project where the aim is to take in a file of a big enough file size, process it in chunks and return pattern matches, using regex and goroutines.
+Simple concurrent Golang project that makes use of concurrency and regex to go through a file and return pattern matches within said file.
+You can think of it as a paralelized grep (or pgrep for short).
